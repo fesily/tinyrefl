@@ -1,4 +1,4 @@
-#include <cppast/cpp_class.hpp>
+﻿#include <cppast/cpp_class.hpp>
 #include <cppast/cpp_enum.hpp>
 #include <cppast/cpp_member_variable.hpp>
 #include <cppast/cpp_member_function.hpp>
@@ -16,23 +16,37 @@
 #include <functional>
 #include <regex>
 #include <unordered_set>
-#include <cppfs/fs.h>
-#include <cppfs/FileHandle.h>
+#include <filesystem>
+#pragma comment(lib,"cppast.lib")
+#pragma comment(lib,"_cppast_tiny_process.lib")
+
+bool flag_ismsvc = false;
+#if 1
 #include <llvm/Support/CommandLine.h>
 
 namespace cl = llvm::cl;
-
+constexpr const char* externname = ".tinyrefl";
 bool is_outdated_file(const std::string& file)
 {
-    const auto input_file = cppfs::fs::open(file);
-    const auto output_file = cppfs::fs::open(file + ".tinyrefl");
+	using namespace std;
+	try
+	{
+		filesystem::path input_file = file;
+		filesystem::path output_file = file + externname;
+		assert(filesystem::exists(input_file));
 
-    assert(input_file.exists());
+		return !filesystem::exists(output_file) ||
+			filesystem::last_write_time(input_file) > filesystem::last_write_time(output_file);
+	}
+	catch (const std::filesystem::filesystem_error&)
+	{
 
-    return !output_file.exists() || input_file.modificationTime() > output_file.modificationTime();
+	}
+	return false;
 }
 
 static const std::string ATTRIBUTES_IGNORE = "tinyrefl::ignore";
+static const std::string ATTRIBUTES_REFL = "tinyrefl::meta";
 
 template<typename Seq>
 std::string sequence(const Seq& elems, const std::string& separator = ", ",
@@ -302,12 +316,35 @@ std::string attribute(const cppast::cpp_attribute& attribute)
     {
         const auto& attribute_arguments = attribute.arguments().value();
         full_attribute << "(" << attribute_arguments.as_string() << ")";
-
-        for(const auto& argument : attribute_arguments)
-        {
-            arguments.push_back(string_constant(argument.spelling));
-        }
-
+		bool isConnect = false;
+		for (auto iter{ attribute_arguments.begin() }, end{ attribute_arguments.end() }; iter != end; ++iter)
+		{
+			std::string spelling = iter->spelling;
+			if (iter->kind == cppast::cpp_token_kind::punctuation)
+			{
+				isConnect = false;
+				if (spelling == ",")
+					continue;
+				if (spelling == "::")
+				{
+					arguments.back() += spelling;
+					isConnect = true;
+					continue;
+				}
+			}
+			if (isConnect)
+			{
+				arguments.back() += spelling;
+			}
+			else 
+			{
+				arguments.push_back(spelling);
+			}
+		}
+		for (auto& val : arguments)
+		{
+			val = string_constant(val);
+		}
     }
 
     return fmt::format("TINYREFL_ATTRIBUTE({}, {}, {}, {})",
@@ -581,16 +618,20 @@ void generate_enum(std::ostream& os, const cppast::cpp_enum& enum_)
     }
 }
 
-
 void visit_ast_and_generate(const cppast::cpp_file& ast_root, const std::string& filepath)
 {
-    std::ofstream os{filepath + ".tinyrefl"};
+    std::ofstream os{filepath + externname };
 
     const auto include_guard = fmt::format("TINYREFL_GENERATED_FILE_{}_INCLUDED", std::hash<std::string>()(filepath));
 
-    os << "#ifndef " << include_guard << "\n"
-       << "#define " << include_guard << "\n\n"
-       <<
+	os << "#ifndef " << include_guard << "\n"
+		<< "#define " << include_guard << "\n\n";
+	if (flag_ismsvc)
+	{
+		os << "#pragma warning(push)\n"
+			<< "#pragma warning(disable:4307)\n";
+	}
+    os  <<
 #include "metadata_header.hpp"
        << std::endl;
 
@@ -619,7 +660,7 @@ void visit_ast_and_generate(const cppast::cpp_file& ast_root, const std::string&
 
     generate_string_definitions(os);
     os << body.str();
-
+	os << "#pragma warning(pop)\n";
     os << "\n#endif // " << include_guard << "\n";
 
     std::cout << "Done. Metadata saved in " << filepath << ".tinyrefl\n";
@@ -687,21 +728,118 @@ std::istream& operator>>(std::istream& is, compile_definition& compile_definitio
     compile_definition = parse_compile_definition(input);
     return is;
 }
+namespace {
+	int parse_number(const char*& str)
+	{
+		auto result = 0;
+		for (; *str && *str != '.'; ++str)
+		{
+			result *= 10;
+			result += int(*str - '0');
+		}
+		return result;
+	}
+}
 
-bool reflect_file(const std::string& filepath, const cppast::cpp_standard cpp_standard, cl::list<std::string>& include_dirs, cl::list<std::string>& definitions, cl::list<std::string>& warnings, const std::vector<std::string>& custom_flags)
+inline void format_path(std::string& path)
 {
+	path = std::filesystem::path(path).generic_string();
+}
+inline void format_path(cl::opt<std::string>& path)
+{
+	format_path(path.getValue());
+}
+template<typename... path>
+void format_paths(path&... ps)
+{
+	(format_path(ps), ...);
+}
+#include <windows.h>
+bool reflect_file(std::string filepath
+	, const cppast::cpp_standard cpp_standard
+	, cl::list<std::string>& include_dirs
+	, cl::list<std::string>& definitions
+	, const std::vector<std::string>& custom_flags
+	, cl::list<std::string>& warnings
+	, std::string clangbin, std::string clangversion,std::string clangsystemfile,bool nodry,bool msvcSupport)
+{
+	flag_ismsvc = msvcSupport;
+	format_paths(filepath, clangbin, clangsystemfile);
+	for (auto& p : include_dirs)
+		format_path(p);
+	try
+	{
+		if (clangbin.empty())
+		{
+			std::wstring buffer;
+			buffer.resize(4096);
+			if (::GetModuleFileNameW(NULL, buffer.data(),4096) > 0)
+			{
+				std::filesystem::path path = buffer;
+				path.remove_filename();
+				std::filesystem::directory_iterator iterator(path);
+				for (const std::filesystem::directory_entry& directoryEntry : iterator)
+				{
+					if (directoryEntry.is_regular_file() && directoryEntry.path().filename() == "clang.exe")
+					{
+						std::cout << "in path:" << std::filesystem::current_path() << "find clang.exe (using version clang 6.0.0)" << std::endl;
+						clangbin = directoryEntry.path().generic_string();
+						clangversion = "6.0.0";
+						clangsystemfile = (path += "/clang/6.0.0/include").generic_string();
+						if (!std::filesystem::exists(clangsystemfile))
+						{
+							std::cout << "but not find llvm lib include dir:" << clangsystemfile << std::endl;
+							clangbin.clear();
+							clangversion.clear();
+							clangsystemfile.clear();
+						}
+						break;
+					}
+				}
+			}
+		}
+		if (!clangbin.empty())
+		{
+			bool ret = std::filesystem::exists(clangbin);
+			if (clangversion.empty())
+			{
+				std::cout << "need " << clangversion << std::endl;
+				return false;
+			}
+			ret |= std::filesystem::exists(clangsystemfile);
+			include_dirs.push_back(clangsystemfile);
+		}
+
+	}
+	catch (const std::filesystem::filesystem_error& e)
+	{
+		std::cout << e.what() << std::endl;
+		return false;
+	}
     using parser_t = cppast::simple_file_parser<cppast::libclang_parser>;
 
-    if(!is_outdated_file(filepath))
+    if(!is_outdated_file(filepath) && !nodry)
     {
         std::cout << "file " << filepath << " metadata is up to date, skipping\n";
         return true;
     }
-
     cppast::cpp_entity_index index;
     parser_t parser{type_safe::ref(index)};
     parser_t::config config;
-    config.set_flags(cpp_standard);
+	cppast::compile_flags flag; 
+	if (msvcSupport)
+	{
+		flag |= cppast::compile_flag::ms_compatibility | cppast::compile_flag::ms_extensions;;
+	}
+    config.set_flags(cpp_standard, flag);
+	if (!clangbin.empty())
+	{
+		auto ptr = clangversion.c_str();
+		auto major = parse_number(ptr);
+		auto minor = parse_number(ptr);
+		auto patch = parse_number(ptr);
+		config.set_clang_binary(clangbin, major, minor, patch);
+	}
 
     std::cout << "parsing file " << filepath << " "
         << cppast::to_string(cpp_standard) << " ";
@@ -780,25 +918,74 @@ bool reflect_file(const std::string& filepath, const cppast::cpp_standard cpp_st
 
     return false;
 }
+inline std::string WCharToChar(const wchar_t* str)
+{
+	return std::filesystem::path(str).generic_string();
+}
+
+//extern "C"{
+//	__declspec(dllexport) bool reflect_file_execute(const wchar_t* filepath
+//		, const cppast::cpp_standard cpp_standard
+//		, const wchar_t** include_dirs, size_t include_dirs_size
+//		, const wchar_t** definitions, size_t definitions_size
+//		, const wchar_t** custom_flags, size_t custom_flags_size
+//		, const wchar_t* clangbin, const wchar_t* clangversion, const wchar_t* clangsystemdir, bool nodry, bool msvcSupport)
+//	{
+//		cl::list<std::string> includedirs(cl::NumOccurrencesFlag::Optional);
+//		for (int i = 0; i < include_dirs_size; ++i)
+//		{
+//			includedirs.push_back(WCharToChar(include_dirs[i]));
+//		}
+//		cl::list<std::string> definitions1(cl::NumOccurrencesFlag::Optional);
+//		for (int i = 0; i < definitions_size; ++i)
+//		{
+//			includedirs.push_back(WCharToChar(definitions[i]));
+//		}
+//		std::vector<std::string> customflags;
+//		for (int i = 0; i < custom_flags_size; ++i)
+//		{
+//			includedirs.push_back(WCharToChar(custom_flags[i]));
+//		}
+//		cl::list<std::string> warnings(cl::NumOccurrencesFlag::Optional);
+//		return reflect_file(WCharToChar(filepath), cpp_standard
+//			, includedirs, definitions1, customflags, warnings
+//			, WCharToChar(clangbin), WCharToChar(clangversion), WCharToChar(clangsystemdir), nodry, msvcSupport);
+//	}
+//
+//	__declspec(dllexport) const wchar_t* reflect_generate_path(const wchar_t* filepath)
+//	{
+//		std::filesystem::path path(filepath);
+//		path += externname;
+//		static std::wstring storeBuffer;
+//		storeBuffer = path.generic_wstring();
+//		return storeBuffer.c_str();
+//	}
+//}
 
 int main(int argc, char** argv)
 {
-    cl::opt<std::string>          filename{cl::Positional, cl::desc("<input header>"), cl::Required};
-    cl::list<std::string>         includes{"I", cl::Prefix, cl::ValueOptional, cl::desc("Include directories")};
-    cl::list<std::string>         definitions{"D", cl::Prefix, cl::ValueOptional, cl::desc("Compile definitions")};
-    cl::list<std::string>         warnings{"W", cl::Prefix, cl::ValueOptional, cl::desc("Warnings")};
-    cl::opt<cppast::cpp_standard> stdversion{"std", cl::desc("C++ standard"), cl::values(
-        clEnumValN(cppast::cpp_standard::cpp_98, "c++98", "C++ 1998 standard"),
-        clEnumValN(cppast::cpp_standard::cpp_03, "c++03", "C++ 2003 standard"),
-        clEnumValN(cppast::cpp_standard::cpp_11, "c++11", "C++ 2011 standard"),
-        clEnumValN(cppast::cpp_standard::cpp_14, "c++14", "C++ 2014 standard"),
-        clEnumValN(cppast::cpp_standard::cpp_1z, "c++17", "C++ 2017 standard")
-    )};
-    cl::list<std::string> custom_flags{cl::Sink, cl::desc("Custom compiler flags")};
-
+	cl::opt<std::string>          filename{ cl::Positional, cl::desc("<input header>"), cl::Required };
+	cl::list<std::string>         includes{ "I", cl::Prefix, cl::ValueOptional, cl::desc("Include directories") };
+	cl::list<std::string>         definitions{ "D", cl::Prefix, cl::ValueOptional, cl::desc("Compile definitions") };
+	cl::list<std::string>         warnings{"W", cl::Prefix, cl::ValueOptional, cl::desc("Warnings")};
+	cl::opt<bool>				  parseWithMsvc{ "msvc",cl::Prefix,cl::ValueOptional,cl::desc("support msvc parse") };
+	cl::opt<std::string>          clangBinary{ "cl", cl::Prefix, cl::ValueOptional, cl::desc("clang binary path, exp:-cl=\"H:\\llvm\\clang.exe\"") };
+	cl::opt<std::string>          clangBinaryVersion{ "clv", cl::Prefix, cl::ValueOptional, cl::desc("clang binary exe version,exp:-clv=6.0.0") };
+	cl::opt<std::string>          clanggSystemIncludeDir{ "SI", cl::Prefix, cl::ValueOptional, cl::desc("clang system include dir, exp:-SI=\"H:\\llvm\\lib\\include\"") };
+	cl::opt<cppast::cpp_standard> stdversion{ "std", cl::desc("C++ standard"), cl::values(
+		clEnumValN(cppast::cpp_standard::cpp_98, "c++98", "C++ 1998 standard"),
+		clEnumValN(cppast::cpp_standard::cpp_03, "c++03", "C++ 2003 standard"),
+		clEnumValN(cppast::cpp_standard::cpp_11, "c++11", "C++ 2011 standard"),
+		clEnumValN(cppast::cpp_standard::cpp_14, "c++14", "C++ 2014 standard"),
+		clEnumValN(cppast::cpp_standard::cpp_1z, "c++17", "C++ 2017 standard")
+	) };
+	cl::list<std::string> custom_flags{ cl::Sink, cl::desc("Custom compiler flags") };
+	cl::opt<bool>		  nodry{ "nodry",cl::Prefix,cl::ValueOptional,cl::desc("must update file") };
     if(cl::ParseCommandLineOptions(argc, argv, "Tinyrefl codegen tool"))
     {
-        if(reflect_file(filename, stdversion, includes, definitions, warnings, custom_flags))
+		if (reflect_file(filename, stdversion, includes, definitions, custom_flags,warnings,
+			clangBinary, clangBinaryVersion, clanggSystemIncludeDir,
+			nodry, parseWithMsvc))
         {
             return 0;
         }
@@ -812,3 +999,5 @@ int main(int argc, char** argv)
         return 2;
     }
 }
+
+#endif

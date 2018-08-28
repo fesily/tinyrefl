@@ -34,7 +34,7 @@ public:
 
     struct [[Foo]] Foo {};
 
-    struct [[InnerClassWithMembers(42, "foo")]] InnerClassWithMembers
+    struct [[InnerClassWithMembers(42, MyClass::Enum::A,"foo")]] InnerClassWithMembers
     {
         int a, b, c;
     };

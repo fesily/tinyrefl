@@ -13,10 +13,9 @@ namespace utils
 {
 
 template<typename T>
-const std::string& type_name()
+constexpr std::string_view type_name()
 {
-    static std::string name{ctti::nameof<T>().str()};
-    return name;
+    return ctti::nameof_v<T>;
 }
 
 }

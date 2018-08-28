@@ -98,10 +98,6 @@ inline std::ostream& operator<<(std::ostream& os, const entity_kind e)
 template<typename T, std::size_t N>
 struct constexpr_array
 {
-    constexpr constexpr_array(const std::initializer_list<T>& init) :
-        constexpr_array{init, tinyrefl::meta::make_index_sequence<N>()}
-    {}
-
     constexpr const T& operator[](std::size_t i) const
     {
         return _array[i];
@@ -122,13 +118,8 @@ struct constexpr_array
         return N;
     }
 
-private:
     T _array[N];
 
-    template<std::size_t... Is>
-    constexpr constexpr_array(const std::initializer_list<T>& init, tinyrefl::meta::index_sequence<Is...>) :
-        _array{*(init.begin() + Is)...}
-    {}
 };
 
 template<typename List>
@@ -141,6 +132,16 @@ struct typelist_to_array<tinyrefl::meta::list<Values...>>
     using array_type = constexpr_array<value_type, ctti::detail::max(static_cast<std::size_t>(1), sizeof...(Values))>;
 
     static constexpr array_type value = {Values::value...};
+};
+template<typename Name, typename Namespace, typename FullAttribute, typename Args>
+struct attribute_metadata;
+template<typename Name, typename Namespace, typename FullAttribute, typename... Args>
+struct typelist_to_array<attribute_metadata<Name, Namespace, FullAttribute, tinyrefl::meta::list<Args...>>>
+{
+	using value_type = typename std::remove_cv<decltype(tinyrefl::meta::pack_head_t<Name, Namespace, FullAttribute, Args...>::value)>::type;
+	using array_type = constexpr_array<value_type, ctti::detail::max(static_cast<std::size_t>(1), sizeof...(Args)+3)>;
+
+	static constexpr array_type value = { Name::value,Namespace::value,FullAttribute::value, Args::value... };
 };
 
 template<typename... Values>

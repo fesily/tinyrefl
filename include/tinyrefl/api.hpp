@@ -56,6 +56,9 @@ constexpr bool has_metadata()
 {
     return tinyrefl::backend::metadata_registered_for_type<T>::value;
 }
+template<typename T>
+constexpr bool has_metadata_v = tinyrefl::backend::metadata_registered_for_type<T>::value;
+
 
 template<typename Metadata>
 constexpr bool has_attribute(const Metadata& metadata, const ctti::detail::cstring& attribute)
@@ -64,17 +67,13 @@ constexpr bool has_attribute(const Metadata& metadata, const ctti::detail::cstri
 }
 
 template<typename T>
-constexpr auto has_attribute(const ctti::detail::cstring& attribute) -> tinyrefl::meta::enable_if_t<
-    has_metadata<T>(), bool
->
+constexpr std::enable_if_t<has_metadata_v<T>,bool> has_attribute(const ctti::detail::cstring& attribute)
 {
     return tinyrefl::backend::has_attribute(metadata<T>{}, attribute);
 }
 
 template<typename T>
-constexpr auto has_attribute(const ctti::detail::cstring& /* attribute */) -> tinyrefl::meta::enable_if_t<
-    !has_metadata<T>(), bool
->
+constexpr std::enable_if_t<!has_metadata_v<T>, bool>  has_attribute(const ctti::detail::cstring& /* attribute */)
 {
     return false;
 }
@@ -120,20 +119,20 @@ struct overloaded_function<tinyrefl::meta::list<Head>> : public Head
     using Head::operator();
 };
 
-template<typename... Ts, typename Function, std::size_t... Indices>
-auto tuple_map_impl(const std::tuple<Ts...>& tuple, Function function, tinyrefl::meta::index_sequence<Indices...>)
+template< std::size_t... Indices,typename Function, typename... Ts>
+auto tuple_map_impl(const std::tuple<Ts...>& tuple, Function function, std::index_sequence<Indices...>)
 {
     return std::forward_as_tuple(function(std::get<Indices>(tuple))...);
 }
 
-template<typename... Ts, typename Function>
+template< typename Function,typename... Ts>
 auto tuple_map(const std::tuple<Ts...>& tuple, Function function)
 {
-    return tuple_map_impl(tuple, function, tinyrefl::meta::make_index_sequence_for<Ts...>());
+    return tuple_map_impl(tuple, function,std::index_sequence_for<Ts...>());
 }
 
-template<typename... Ts, std::size_t... Indices>
-constexpr auto typelist_to_tuple_impl(tinyrefl::meta::list<Ts...>, tinyrefl::meta::index_sequence<Indices...>)
+template<std::size_t... Indices, typename... Ts>
+constexpr auto typelist_to_tuple_impl(std::index_sequence<Indices...>,tinyrefl::meta::list<Ts...>)
 {
     return std::make_tuple(tinyrefl::type_tag<tinyrefl::meta::pack_get_t<Indices, Ts...>>{}...);
 }
@@ -141,7 +140,7 @@ constexpr auto typelist_to_tuple_impl(tinyrefl::meta::list<Ts...>, tinyrefl::met
 template<typename... Ts>
 constexpr auto typelist_to_tuple(tinyrefl::meta::list<Ts...>)
 {
-    return typelist_to_tuple_impl(tinyrefl::meta::list<Ts...>{}, tinyrefl::meta::make_index_sequence_for<Ts...>{});
+	return typelist_to_tuple_impl(std::index_sequence_for<Ts...>{}, tinyrefl::meta::list<Ts...>{});
 }
 
 template<typename First, typename Second, typename... Tail, typename Comparator>
@@ -183,7 +182,7 @@ template<typename T>
 struct is_comparable<T, tinyrefl::meta::void_t<decltype(std::declval<T>() == std::declval<T>())>> : public std::true_type {};
 
 template<typename Class, typename Visitor, std::size_t Depth, entity ClassKind>
-tinyrefl::meta::enable_if_t<!std::is_class<Class>::value || !has_metadata<Class>()>
+tinyrefl::meta::enable_if_t<!std::is_class<Class>::value || !has_metadata_v<Class>>
 visit_class(Visitor visitor, tinyrefl::meta::size_t<Depth>, ctti::static_value<entity, ClassKind>)
 {
     visitor(tinyrefl::utils::type_name<Class>(),
@@ -193,7 +192,7 @@ visit_class(Visitor visitor, tinyrefl::meta::size_t<Depth>, ctti::static_value<e
 }
 
 template<typename Class, typename Visitor, std::size_t Depth, entity ClassKind>
-tinyrefl::meta::enable_if_t<std::is_class<Class>::value && has_metadata<Class>()>
+tinyrefl::meta::enable_if_t<std::is_class<Class>::value && has_metadata_v<Class>>
 visit_class(Visitor visitor, tinyrefl::meta::size_t<Depth>, ctti::static_value<entity, ClassKind>)
 {
     // visit base classes first (if reflected)
@@ -213,7 +212,7 @@ visit_class(Visitor visitor, tinyrefl::meta::size_t<Depth>, ctti::static_value<e
     {
         using ctor = typename decltype(Ctor)::type;
 
-        visitor(ctor::name.str(),
+        visitor(ctor::name,
                 tinyrefl::meta::size_t<Depth>(),
                 ctor(),
                 TINYREFL_STATIC_VALUE(entity::CONSTRUCTOR)());
@@ -223,7 +222,7 @@ visit_class(Visitor visitor, tinyrefl::meta::size_t<Depth>, ctti::static_value<e
     {
         using member = typename decltype(Member)::type;
 
-        visitor(member::name.name().str(),
+        visitor(member::name.name(),
                 tinyrefl::meta::size_t<Depth>(),
                 member(),
                 TINYREFL_STATIC_VALUE(entity::MEMBER_VARIABLE)());
@@ -233,7 +232,7 @@ visit_class(Visitor visitor, tinyrefl::meta::size_t<Depth>, ctti::static_value<e
     {
         using member = typename decltype(Member)::type;
 
-        visitor(member::name.name().str(),
+        visitor(member::name.name(),
                 tinyrefl::meta::size_t<Depth>(),
                 member(),
                 TINYREFL_STATIC_VALUE(entity::MEMBER_FUNCTION)());
@@ -243,7 +242,7 @@ visit_class(Visitor visitor, tinyrefl::meta::size_t<Depth>, ctti::static_value<e
     {
         using class_type = typename decltype(class_)::type;
 
-        visitor(ctti::detailed_nameof<class_type>().name().str(),
+        visitor(ctti::detailed_nameof<class_type>().name(),
                 tinyrefl::meta::size_t<Depth>(),
                 class_,
                 TINYREFL_STATIC_VALUE(entity::MEMBER_CLASS)());
@@ -253,7 +252,7 @@ visit_class(Visitor visitor, tinyrefl::meta::size_t<Depth>, ctti::static_value<e
     {
         using enum_type = typename decltype(enum_)::type;
 
-        visitor(ctti::detailed_nameof<enum_type>().name().str(),
+        visitor(ctti::detailed_nameof<enum_type>().name(),
                 tinyrefl::meta::size_t<Depth>(),
                 enum_,
                 TINYREFL_STATIC_VALUE(entity::MEMBER_ENUM)());
@@ -328,11 +327,11 @@ void visit_object(const Class& object, Visitors... visitors)
     auto visitor = tinyrefl::overloaded_function_default(visitors...);
 
     visit_class<typename std::decay<Class>::type>(
-        [&](const std::string& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::BASE_CLASS))
+        [&](const std::string_view& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::BASE_CLASS))
     {
         visitor(name, depth, tinyrefl::detail::cast<typename decltype(entity)::type>(object), TINYREFL_STATIC_VALUE(tinyrefl::entity::OBJECT)());
     },
-        [&](const std::string& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+        [&](const std::string_view& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
     {
         visitor(name, depth, entity.get(object), TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE)());
     });
@@ -344,11 +343,11 @@ void visit_object(Class& object, Visitors... visitors)
     auto visitor = tinyrefl::overloaded_function_default(visitors...);
 
     visit_class<typename std::decay<Class>::type>(
-        [&](const std::string& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::BASE_CLASS))
+        [&](const std::string_view& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::BASE_CLASS))
     {
         visitor(name, depth, tinyrefl::detail::cast<typename decltype(entity)::type>(object), TINYREFL_STATIC_VALUE(tinyrefl::entity::OBJECT)());
     },
-        [&](const std::string& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+        [&](const std::string_view& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
     {
         visitor(name, depth, entity.get(object), TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE)());
     });
@@ -360,7 +359,7 @@ auto visit_objects(const std::tuple<Class...>& objects, Visitors... visitors)
     auto visitor = tinyrefl::overloaded_function_default(visitors...);
 
     visit_class<typename std::decay<tinyrefl::meta::pack_head_t<Class...>>::type>(
-        [&objects, visitor](const std::string& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::BASE_CLASS))
+        [&objects, visitor](const std::string_view& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::BASE_CLASS))
     {
         visitor(
             name,
@@ -369,7 +368,7 @@ auto visit_objects(const std::tuple<Class...>& objects, Visitors... visitors)
             TINYREFL_STATIC_VALUE(tinyrefl::entity::OBJECT)()
         );
     },
-        [&objects, visitor](const std::string& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+        [&objects, visitor](const std::string_view& name, auto depth, auto entity, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
     {
         visitor(
             name,
@@ -465,7 +464,7 @@ Class make_object(const std::tuple<Ts...>& tuple)
 template<typename Enum>
 constexpr auto enum_cast(const std::underlying_type_t<Enum> value) ->
     std::enable_if_t<
-        std::is_enum<Enum>::value && tinyrefl::has_metadata<Enum>(),
+        std::is_enum<Enum>::value && tinyrefl::has_metadata_v<Enum>,
         Enum
     >
 {
@@ -475,7 +474,7 @@ constexpr auto enum_cast(const std::underlying_type_t<Enum> value) ->
 template<typename Enum>
 constexpr auto enum_cast(const ctti::detail::cstring name) ->
     std::enable_if_t<
-        std::is_enum<Enum>::value && tinyrefl::has_metadata<Enum>(),
+        std::is_enum<Enum>::value && tinyrefl::has_metadata_v<Enum>,
         Enum
     >
 {
@@ -485,7 +484,7 @@ constexpr auto enum_cast(const ctti::detail::cstring name) ->
 template<typename Enum, std::size_t N>
 constexpr auto enum_cast(const char (&name)[N]) ->
     std::enable_if_t<
-        std::is_enum<Enum>::value && tinyrefl::has_metadata<Enum>(),
+        std::is_enum<Enum>::value && tinyrefl::has_metadata_v<Enum>,
         Enum
     >
 {
@@ -493,19 +492,19 @@ constexpr auto enum_cast(const char (&name)[N]) ->
 }
 
 template<typename Enum>
-auto enum_cast(const std::string& name) ->
+auto enum_cast(const std::string_view& name) ->
     std::enable_if_t<
-        std::is_enum<Enum>::value && tinyrefl::has_metadata<Enum>(),
+        std::is_enum<Enum>::value && tinyrefl::has_metadata_v<Enum>,
         Enum
     >
 {
-    return enum_cast<Enum>(ctti::detail::cstring{name.c_str(), name.size()});
+    return enum_cast<Enum>(ctti::detail::cstring{ name });
 }
 
 template<typename Enum>
 constexpr auto underlying_value(const Enum value) ->
     std::enable_if_t<
-        std::is_enum<Enum>::value && tinyrefl::has_metadata<Enum>(),
+        std::is_enum<Enum>::value && tinyrefl::has_metadata_v<Enum>,
         std::underlying_type_t<Enum>
     >
 {
@@ -515,7 +514,7 @@ constexpr auto underlying_value(const Enum value) ->
 template<typename Enum>
 constexpr auto to_string(const Enum value) ->
     std::enable_if_t<
-        std::is_enum<Enum>::value && tinyrefl::has_metadata<Enum>(),
+        std::is_enum<Enum>::value && tinyrefl::has_metadata_v<Enum>,
         ctti::detail::cstring
     >
 {
@@ -524,7 +523,7 @@ constexpr auto to_string(const Enum value) ->
 
 template<typename T>
 auto to_json(const T& value) -> std::enable_if_t<
-    !tinyrefl::has_metadata<T>(),
+    !tinyrefl::has_metadata_v<T>,
     const T&
 >
 {
@@ -533,22 +532,22 @@ auto to_json(const T& value) -> std::enable_if_t<
 
 template<typename Class>
 auto to_json(const Class& object) -> std::enable_if_t<
-    tinyrefl::has_metadata<Class>() && std::is_class<Class>::value,
+    tinyrefl::has_metadata_v<Class> && std::is_class<Class>::value,
     json
 >;
 
 template<typename Enum>
 auto to_json(const Enum value) -> std::enable_if_t<
-    tinyrefl::has_metadata<Enum>() && std::is_enum<Enum>::value,
+    tinyrefl::has_metadata_v<Enum> && std::is_enum<Enum>::value,
     json
 >
 {
-    return tinyrefl::to_string(value).str();
+	return static_cast<std::string>(tinyrefl::to_string(value));
 }
 
 template<typename T>
 auto from_json(const json& json) -> std::enable_if_t<
-    !tinyrefl::has_metadata<T>(),
+    !tinyrefl::has_metadata_v<T>,
     T
 >
 {
@@ -559,7 +558,7 @@ auto from_json(const json& json) -> std::enable_if_t<
 
 template<typename Enum>
 auto from_json(const json& json) -> std::enable_if_t<
-    tinyrefl::has_metadata<Enum>() && std::is_enum<Enum>::value,
+    tinyrefl::has_metadata_v<Enum> && std::is_enum<Enum>::value,
     Enum
 >
 {
@@ -569,7 +568,7 @@ auto from_json(const json& json) -> std::enable_if_t<
 
 template<typename Class>
 auto from_json(const json& json) -> std::enable_if_t<
-    tinyrefl::has_metadata<Class>() && std::is_class<Class>::value,
+    tinyrefl::has_metadata_v<Class> && std::is_class<Class>::value,
     Class
 >;
 
@@ -580,7 +579,7 @@ namespace nlohmann
 
 template<typename Class>
 auto to_json(const Class& object) -> std::enable_if_t<
-    tinyrefl::has_metadata<Class>() && std::is_class<Class>::value,
+    tinyrefl::has_metadata_v<Class> && std::is_class<Class>::value,
     json
 >
 {
@@ -589,7 +588,7 @@ auto to_json(const Class& object) -> std::enable_if_t<
 
 template<typename T>
 auto from_json(const json& json, T& result) -> std::enable_if_t<
-    tinyrefl::has_metadata<T>(),
+    tinyrefl::has_metadata_v<T>,
     T
 >
 {
@@ -603,15 +602,15 @@ namespace tinyrefl
 
 template<typename Class>
 auto to_json(const Class& object) -> std::enable_if_t<
-    tinyrefl::has_metadata<Class>() && std::is_class<Class>::value,
+    tinyrefl::has_metadata_v<Class> && std::is_class<Class>::value,
     json
 >
 {
     auto result = json::object();
 
-    visit_member_variables(object, [&result](const std::string& name, const auto& member)
+    visit_member_variables(object, [&result](const std::string_view& name, const auto& member)
     {
-        result[name] = to_json(member);
+        result[static_cast<std::string>(name)] = to_json(member);
     });
 
     return result;
@@ -619,15 +618,15 @@ auto to_json(const Class& object) -> std::enable_if_t<
 
 template<typename Class>
 auto from_json(const json& json) -> std::enable_if_t<
-    tinyrefl::has_metadata<Class>() && std::is_class<Class>::value,
+    tinyrefl::has_metadata_v<Class> && std::is_class<Class>::value,
     Class
 >
 {
     Class result;
 
-    visit_member_variables(result, [&json](const std::string& name, auto& member)
+    visit_member_variables(result, [&json](const std::string_view& name, auto& member)
     {
-        member = from_json<std::decay_t<decltype(member)>>(json[name]);
+		member = from_json<std::decay_t<decltype(member)>>(json[static_cast<std::string>(name)]);
     });
 
     return result;
@@ -635,7 +634,7 @@ auto from_json(const json& json) -> std::enable_if_t<
 
 template<typename Class>
 auto to_string(const Class& object) -> std::enable_if_t<
-    tinyrefl::has_metadata<Class>() && std::is_class<Class>::value,
+    tinyrefl::has_metadata_v<Class> && std::is_class<Class>::value,
     std::string
 >
 {
@@ -671,7 +670,7 @@ constexpr auto equal(const Range& lhs, const Range& rhs) -> std::enable_if_t<
 template<typename... Class>
 auto equal(Class&&... objects) -> std::enable_if_t<
     (!detail::is_comparable<std::decay_t<tinyrefl::meta::pack_head_t<Class...>>>::value && (sizeof...(Class) >= 2)) &&
-    tinyrefl::has_metadata<std::decay_t<tinyrefl::meta::pack_head_t<Class...>>>() &&
+    tinyrefl::has_metadata_v<std::decay_t<tinyrefl::meta::pack_head_t<Class...>>> &&
     std::is_class<std::decay_t<tinyrefl::meta::pack_head_t<Class...>>>::value,
     bool
 >;
@@ -679,7 +678,7 @@ auto equal(Class&&... objects) -> std::enable_if_t<
 template<typename... Class>
 auto memberwise_equal(Class&&... objects) -> std::enable_if_t<
     (sizeof...(Class) >= 2) &&
-    tinyrefl::has_metadata<std::decay_t<tinyrefl::meta::pack_head_t<Class...>>>() &&
+    tinyrefl::has_metadata_v<std::decay_t<tinyrefl::meta::pack_head_t<Class...>>> &&
     std::is_class<std::decay_t<tinyrefl::meta::pack_head_t<Class...>>>::value,
     bool
 >
@@ -700,7 +699,7 @@ auto memberwise_equal(Class&&... objects) -> std::enable_if_t<
 template<typename... Class>
 auto equal(Class&&... objects) -> std::enable_if_t<
     (!detail::is_comparable<std::decay_t<tinyrefl::meta::pack_head_t<Class...>>>::value && (sizeof...(Class) >= 2)) &&
-    tinyrefl::has_metadata<std::decay_t<tinyrefl::meta::pack_head_t<Class...>>>() &&
+    tinyrefl::has_metadata_v<std::decay_t<tinyrefl::meta::pack_head_t<Class...>>> &&
     std::is_class<std::decay_t<tinyrefl::meta::pack_head_t<Class...>>>::value,
     bool
 >

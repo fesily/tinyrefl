@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="std::nullopt_t">
+    <DisplayString>nullopt</DisplayString>
+  </Type>
+
+  <Type Name="type_safe::basic_optional&lt;*&gt;">
+    <DisplayString Condition="storage.empty_">nullopt</DisplayString>
+    <DisplayString Condition="!storage.empty_">{&amp;storage.storage_}</DisplayString>
+    <Expand>
+      <Item Condition="!storage.empty_" Name="value">&amp;storage.storage_</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="std::basic_string_view&lt;*,*&gt;">
+    <DisplayString>{data_,[size_]}</DisplayString>
+    <StringView>data,[size_]</StringView>
+    <Expand>
+      <Item Name="[size]" ExcludeView="simple">size_</Item>
+      <ArrayItems>
+        <Size>size_</Size>
+        <ValuePointer>data_</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+
+  <Type Name="levelData">
+    <DisplayString Condition="s_no_off">CantRead</DisplayString>
+    <DisplayString Condition="!s_no_off">{pPrt}</DisplayString>
+    <Expand>
+      <Item Condition="!s_no_off" Name="data">pPrt</Item>
+    </Expand>
+  </Type>
+  <Type Name="Levels">
+    <DisplayString>{pLevel->_List}</DisplayString>
+    <Expand>
+      <ExpandedItem>pLevel->_List</ExpandedItem>
+    </Expand>
+  </Type>
+
+  <Type Name="xLevel">
+    <DisplayString Condition="pLevel != 0 &amp;&amp; pxlevel != 0">xlevel={pxlevel->_List},level={pLevel->_List}</DisplayString>
+    <DisplayString Condition="pLevel == 0 &amp;&amp; pxlevel != 0">xlevel={pxlevel->_List}</DisplayString>
+    <DisplayString Condition="pLevel != 0 &amp;&amp; pxlevel == 0">level={pLevel->_List}</DisplayString>
+    <DisplayString Condition="pLevel == 0 &amp;&amp; pxlevel == 0">null</DisplayString>
+    <Expand>
+      <ExpandedItem Condition ="pxlevel != 0">pxlevel->_List</ExpandedItem>
+      <ExpandedItem Condition ="pLevel != 0">pLevel->_List</ExpandedItem>
+    </Expand>
+  </Type>
+</AutoVisualizer>

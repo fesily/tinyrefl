@@ -11,7 +11,7 @@ TEST_CASE("tinyrefl api")
 {
     SECTION("class metadata")
     {
-        using Metadata = $(my_namespace::MyClass);
+		using Metadata = $(my_namespace::MyClass);
         std::ostringstream ss;
         INFO((tinyrefl::meta::foreach<Metadata::base_classes>([&ss](auto type, auto index)
         {
@@ -43,7 +43,6 @@ TEST_CASE("tinyrefl api")
             REQUIRE(tinyrefl::meta::get_t<2, Metadata::constructors>::name == "MyClass(std::vector<std::string>)");
         }
     }
-
     SECTION("attributes")
     {
         REQUIRE(tinyrefl::meta::get_t<0, tinyrefl::metadata<my_namespace::MyClass>::constructors>().has_attribute("ctor"));
@@ -53,14 +52,15 @@ TEST_CASE("tinyrefl api")
         REQUIRE(tinyrefl::has_attribute<my_namespace::MyClass::Enum>("Enum"));
     }
 
+#if 1
     SECTION("visit class")
     {
         auto test = [](const tinyrefl::entity expected_entity_kind, const std::unordered_map<std::string, int>& expected_results)
         {
-            std::unordered_set<std::string> entities;
+            std::unordered_set<std::string_view> entities;
 
             tinyrefl::visit_class<my_namespace::MyClass>(
-                [&entities, expected_entity_kind](const std::string& name, auto /* depth */, auto /* entity */, auto entity_kind)
+                [&entities, expected_entity_kind](std::string_view name, auto /* depth */, auto /* entity */, auto entity_kind)
             {
                 if(entity_kind == expected_entity_kind)
                 {
@@ -195,11 +195,11 @@ TEST_CASE("tinyrefl api")
     {
         auto test = [](auto expected_kind, const std::unordered_set<std::string>& expected)
         {
-            std::unordered_set<std::string> members;
+            std::unordered_set<std::string_view> members;
             my_namespace::MyClass myObject;
 
             tinyrefl::visit_object(myObject,
-                [&members, expected_kind](const std::string& name, auto /* depth */, auto /* entity */, decltype(expected_kind) kind)
+                [&members, expected_kind](const std::string_view& name, auto /* depth */, auto /* entity */, decltype(expected_kind) kind)
             {
                 CHECK(kind == expected_kind.get());
                 members.insert(name);
@@ -254,7 +254,7 @@ TEST_CASE("tinyrefl api")
             bool enumValueVisited = false;
             bool somethingVisited = false;
 
-            tinyrefl::visit_object(myObject, [&](const std::string& name, auto /* depth */, auto& member, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+            tinyrefl::visit_object(myObject, [&](const std::string_view& name, auto /* depth */, auto& member, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
             {
                 if(name == "str")
                 {
@@ -292,21 +292,21 @@ TEST_CASE("tinyrefl api")
             my_namespace::MyClass myObject;
 
             tinyrefl::visit_object(myObject,
-                [](const std::string& /* name */, auto /* depth */, std::string& member, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+                [](const std::string_view& /* name */, auto /* depth */, std::string& member, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
             {
                 member = "a new string value";
             },
-                [](const std::string& /* name */, auto /* depth */, std::vector<int>& member, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+                [](const std::string_view& /* name */, auto /* depth */, std::vector<int>& member, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
             {
                 member.assign(42, 42);
             },
-                [](const std::string& /* name */, auto /* depth */, my_namespace::MyClass::InnerClassWithMembers& member, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+                [](const std::string_view& /* name */, auto /* depth */, my_namespace::MyClass::InnerClassWithMembers& member, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
             {
                 member.a = 42;
                 member.b = 42;
                 member.c = 42;
             },
-                [](const std::string& /* name */, auto /* depth */, my_namespace::MyClass::Enum& member, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+                [](const std::string_view& /* name */, auto /* depth */, my_namespace::MyClass::Enum& member, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
             {
                 member = my_namespace::MyClass::Enum::C;
             });
@@ -330,11 +330,11 @@ TEST_CASE("tinyrefl api")
     {
         auto test = [](auto expected_kind, const std::unordered_set<std::string>& expected)
         {
-            std::unordered_set<std::string> members;
+            std::unordered_set<std::string_view> members;
             my_namespace::MyClass lhs, rhs;
 
             tinyrefl::visit_objects(lhs, rhs)(
-                [&members, expected_kind](const std::string& name, auto /* depth */, auto /* entity */, decltype(expected_kind) kind)
+                [&members, expected_kind](const std::string_view& name, auto /* depth */, auto /* entity */, decltype(expected_kind) kind)
             {
                 CHECK(kind == expected_kind.get());
                 members.insert(name);
@@ -390,7 +390,7 @@ TEST_CASE("tinyrefl api")
             bool somethingVisited = false;
 
             tinyrefl::visit_objects(static_cast<my_namespace::MyClass&>(lhs), static_cast<my_namespace::MyClass&>(rhs))
-                ([&lhs, &rhs, addressof, &strVisited, &innerClassInstanceVisited, &vectorVisited, &enumValueVisited, &somethingVisited](const std::string& name, auto /* depth */, auto members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+                ([&lhs, &rhs, addressof, &strVisited, &innerClassInstanceVisited, &vectorVisited, &enumValueVisited, &somethingVisited](const std::string_view& name, auto /* depth */, auto members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
             {
                 auto& lhsMember = std::get<0>(members);
                 auto& rhsMember = std::get<1>(members);
@@ -446,7 +446,7 @@ TEST_CASE("tinyrefl api")
             bool somethingVisited = false;
 
             tinyrefl::visit_objects(static_cast<const my_namespace::MyClass&>(lhs), static_cast<const my_namespace::MyClass&>(rhs))
-                ([&lhs, &rhs, addressof, &strVisited, &innerClassInstanceVisited, &vectorVisited, &enumValueVisited, &somethingVisited](const std::string& name, auto /* depth */, auto members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+                ([&lhs, &rhs, addressof, &strVisited, &innerClassInstanceVisited, &vectorVisited, &enumValueVisited, &somethingVisited](const std::string_view& name, auto /* depth */, auto members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
             {
                 const auto& lhsMember = std::get<0>(members);
                 const auto& rhsMember = std::get<1>(members);
@@ -491,17 +491,17 @@ TEST_CASE("tinyrefl api")
             my_namespace::MyClass lhs, rhs;
 
             tinyrefl::visit_objects(lhs, rhs)(
-                [](const std::string& /* name */, auto /* depth */, std::tuple<std::string&, std::string&> members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+                [](const std::string_view& /* name */, auto /* depth */, std::tuple<std::string&, std::string&> members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
             {
                 std::get<0>(members) = "a new string value";
                 std::get<1>(members) = "a new string value";
             },
-                [](const std::string& /* name */, auto /* depth */, std::tuple<std::vector<int>&, std::vector<int>&> members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+                [](const std::string_view& /* name */, auto /* depth */, std::tuple<std::vector<int>&, std::vector<int>&> members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
             {
                 std::get<0>(members).assign(42, 42);
                 std::get<1>(members).assign(42, 42);
             },
-                [](const std::string& /* name */, auto /* depth */, std::tuple<my_namespace::MyClass::InnerClassWithMembers&, my_namespace::MyClass::InnerClassWithMembers&> members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+                [](const std::string_view& /* name */, auto /* depth */, std::tuple<my_namespace::MyClass::InnerClassWithMembers&, my_namespace::MyClass::InnerClassWithMembers&> members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
             {
                 std::get<0>(members).a = 42;
                 std::get<0>(members).b = 42;
@@ -510,7 +510,7 @@ TEST_CASE("tinyrefl api")
                 std::get<1>(members).b = 42;
                 std::get<1>(members).c = 42;
             },
-                [](const std::string& /* name */, auto /* depth */, std::tuple<my_namespace::MyClass::Enum&, my_namespace::MyClass::Enum&> members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
+                [](const std::string_view& /* name */, auto /* depth */, std::tuple<my_namespace::MyClass::Enum&, my_namespace::MyClass::Enum&> members, TINYREFL_STATIC_VALUE(tinyrefl::entity::MEMBER_VARIABLE))
             {
                 std::get<0>(members) = my_namespace::MyClass::Enum::C;
                 std::get<1>(members) = my_namespace::MyClass::Enum::D;
@@ -547,11 +547,11 @@ TEST_CASE("tinyrefl api")
     {
         auto test = [](const std::unordered_set<std::string>& expected)
         {
-            std::unordered_set<std::string> members;
+            std::unordered_set<std::string_view> members;
             my_namespace::MyClass myObject;
 
             tinyrefl::visit_member_variables(myObject,
-                [&members](const std::string& name, auto /* entity */)
+                [&members](const std::string_view& name, auto /* entity */)
             {
                 members.insert(name);
             });
@@ -592,7 +592,7 @@ TEST_CASE("tinyrefl api")
                 return reinterpret_cast<void*>(std::addressof(object));
             };
 
-            tinyrefl::visit_member_variables(myObject, [&myObject, addressof](const std::string& name, auto& member)
+            tinyrefl::visit_member_variables(myObject, [&myObject, addressof](const std::string_view& name, auto& member)
             {
                 if(name == "str")
                 {
@@ -618,20 +618,20 @@ TEST_CASE("tinyrefl api")
             my_namespace::MyClass myObject;
 
             tinyrefl::visit_member_variables(myObject,
-                [](const std::string& /* name */, std::string& member)
+                [](const std::string_view& /* name */, std::string& member)
             {
                 member = "a new string value";
             },
-                [](const std::string& /* name */, std::vector<int>& member)
+                [](const std::string_view& /* name */, std::vector<int>& member)
             {
                 member.assign(42, 42);
             },
-                [](const std::string& /* name */, my_namespace::MyClass::InnerClassWithMembers& member)
+                [](const std::string_view& /* name */, my_namespace::MyClass::InnerClassWithMembers& member)
             {
                 member.a = 42;
                 member.b = 42;
                 member.c = 42;
-            }, [](const std::string& /* name */, my_namespace::MyClass::Enum& value)
+            }, [](const std::string_view& /* name */, my_namespace::MyClass::Enum& value)
             {
                 value = my_namespace::MyClass::Enum::D;
             });
@@ -807,4 +807,64 @@ TEST_CASE("tinyrefl api")
         CHECK(tinyrefl::equal(c, a));
         CHECK(tinyrefl::not_equal(a, d));
     }
+#endif
+}
+
+TEST_CASE("tinyrefl attributes")
+{
+	REQUIRE((std::is_same<decltype(tinyrefl::select_overload<>(&my_namespace::MyClass::overloaded)), void(my_namespace::MyClass::*)()>::value));
+	REQUIRE((std::is_same<decltype(tinyrefl::select_overload<int>(&my_namespace::MyClass::overloaded)), void(my_namespace::MyClass::*)(int)>::value));
+
+	REQUIRE(tinyrefl::meta::get_t<0, tinyrefl::metadata<my_namespace::MyClass>::constructors>().has_attribute("ctor"));
+	CHECK((tinyrefl::meta::get_t<0, tinyrefl::metadata<my_namespace::MyClass>::constructors>().get_attribute("ctor").args.size())== 0);
+	CHECK((tinyrefl::meta::get_t<0, tinyrefl::metadata<my_namespace::MyClass>::constructors>().get_attribute("ctor").full_attribute) == "ctor");
+	CHECK((tinyrefl::meta::get_t<0, tinyrefl::metadata<my_namespace::MyClass>::constructors>().get_attribute("ctor").name.name()) == "ctor");
+	CHECK((tinyrefl::meta::get_t<0, tinyrefl::metadata<my_namespace::MyClass>::constructors>().get_attribute("ctor").namespace_.name()) == "");
+	REQUIRE(tinyrefl::has_attribute<tinyrefl::static_value<void(my_namespace::MyClass::*)(int), &my_namespace::MyClass::f>>("f"));
+	REQUIRE((tinyrefl::metadata<tinyrefl::static_value<void(my_namespace::MyClass::*)(int), &my_namespace::MyClass::f>>().get_attribute("f").args.size())== 0);
+	REQUIRE((tinyrefl::metadata<tinyrefl::static_value<void(my_namespace::MyClass::*)(int), &my_namespace::MyClass::f>>().get_attribute("f").args[0]) == "");
+
+	REQUIRE(tinyrefl::has_attribute<TINYREFL_STATIC_VALUE(&my_namespace::MyClass::str)>("str"));
+	CHECK((tinyrefl::metadata<TINYREFL_STATIC_VALUE(&my_namespace::MyClass::str)>().get_attribute("str").args.size()) == 0);
+	CHECK((tinyrefl::metadata<TINYREFL_STATIC_VALUE(&my_namespace::MyClass::str)>().get_attribute("str").full_attribute) == "str");
+	CHECK((tinyrefl::metadata<TINYREFL_STATIC_VALUE(&my_namespace::MyClass::str)>().get_attribute("str").namespace_.name()) == "");
+	CHECK((tinyrefl::metadata<TINYREFL_STATIC_VALUE(&my_namespace::MyClass::str)>().get_attribute("str").name.name()) == "str");
+	REQUIRE(tinyrefl::has_attribute<my_namespace::MyClass::Foo>("Foo"));
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::Foo>().get_attribute("Foo").args.size()) == 0);
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::Foo>().get_attribute("Foo").full_attribute) == "Foo");
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::Foo>().get_attribute("Foo").namespace_.name()) == "");
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::Foo>().get_attribute("Foo").name.name()) == "Foo");
+	REQUIRE(tinyrefl::has_attribute<my_namespace::MyClass::Enum>("Enum"));
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::Enum>().get_attribute("Enum").args.size()) == 0);
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::Enum>().get_attribute("Enum").full_attribute) == "Enum");
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::Enum>().get_attribute("Enum").namespace_.name()) == "");
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::Enum>().get_attribute("Enum").name.name())== "Enum");
+
+#if TINYREFL_HAS_ENUM_VALUE_ATTRIBUTES
+	REQUIRE(tinyrefl::has_attribute<TINYREFL_STATIC_VALUE(my_namespace::MyClass::Enum::A)>("A"));
+	CHECK((tinyrefl::metadata<TINYREFL_STATIC_VALUE(my_namespace::MyClass::Enum::A)>().get_attribute("A").args.size()) == 0);
+	CHECK((tinyrefl::metadata<TINYREFL_STATIC_VALUE(my_namespace::MyClass::Enum::A)>().get_attribute("A").full_attribute) == "A");
+	CHECK((tinyrefl::metadata<TINYREFL_STATIC_VALUE(my_namespace::MyClass::Enum::A)>().get_attribute("A").namespace_.name()) == "");
+	CHECK((tinyrefl::metadata<TINYREFL_STATIC_VALUE(my_namespace::MyClass::Enum::A)>().get_attribute("A").name.name()) == "A");
+#endif // TINYREFL_HAS_ENUM_VALUE_ATTRIBUTES
+	
+	REQUIRE(tinyrefl::has_attribute<my_namespace::MyClass::InnerClassWithMembers>("InnerClassWithMembers"));
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::InnerClassWithMembers>().get_attribute("InnerClassWithMembers").args.size()) == 3);
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::InnerClassWithMembers>().get_attribute("InnerClassWithMembers").args[0]) == "42");
+
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::InnerClassWithMembers>().get_attribute("InnerClassWithMembers").args[1]) == "MyClass::Enum::A");
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::InnerClassWithMembers>().get_attribute("InnerClassWithMembers").args[2]) == "\"foo\"");
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::InnerClassWithMembers>().get_attribute("InnerClassWithMembers").full_attribute) == "InnerClassWithMembers(42,MyClass::Enum::A,\"foo\")");
+
+
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::InnerClassWithMembers>().get_attribute("InnerClassWithMembers").namespace_.name()) == "");
+	CHECK((tinyrefl::metadata<my_namespace::MyClass::InnerClassWithMembers>().get_attribute("InnerClassWithMembers").name.name()) == "InnerClassWithMembers");
+
+
+	CHECK(tinyrefl::metadata<my_namespace::MyClass::Foo>().get_attributes().size() == 1);
+	CHECK(tinyrefl::metadata<my_namespace::MyClass::Foo>().get_attribute("Foo").args.size() == 0);
+	CHECK(tinyrefl::metadata<my_namespace::MyClass::Foo>().get_attribute("Foo").full_attribute == "Foo");
+	CHECK(tinyrefl::metadata<my_namespace::MyClass::Foo>().get_attribute("Foo").name.name() == "Foo");
+	CHECK(tinyrefl::metadata<my_namespace::MyClass::Foo>().get_attribute("Foo").namespace_.name() == "");
+
 }
