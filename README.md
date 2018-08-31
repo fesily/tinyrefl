@@ -18,7 +18,7 @@ A work in progress minimal C++ static reflection API and codegen tool.
    // foo.h
 
    namespace mylib {
-   class [[interesting]] Foo {
+   class [[tinyrefl::meta]] Foo {
        std::string str;
        void f() {}
        int i;
@@ -38,7 +38,7 @@ A work in progress minimal C++ static reflection API and codegen tool.
 
    int main()
    {
-       static_assert(tinyrefl::has_attribute<mylib::Foo>("interesting"),
+       static_assert(tinyrefl::has_attribute<mylib::Foo>("tinyrefl::meta"),
            "Wow, I thought your API was interesting...");
 
        static_assert(tinyrefl::metadata<mylib::Foo::Enum>().get_value(mylib::Foo::Enum::A).underlying_value() == 0,

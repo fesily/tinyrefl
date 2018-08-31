@@ -20,8 +20,6 @@
 #pragma comment(lib,"cppast.lib")
 #pragma comment(lib,"_cppast_tiny_process.lib")
 
-bool flag_ismsvc = false;
-#if 1
 #include <llvm/Support/CommandLine.h>
 
 namespace cl = llvm::cl;
@@ -487,7 +485,6 @@ void generate_class(std::ostream& os, const cppast::cpp_class& class_)
     std::cout << " # " << full_qualified_name(class_) << " [attributes: "
                 << sequence(class_.attributes(), ", ", "\"", "\"") << "]\n";
 
-
     cppast::visit(class_, [&](const cppast::cpp_entity& child, const cppast::visitor_info& info)
     {
         if(cppast::has_attribute(child, ATTRIBUTES_IGNORE) || info.is_old_entity() ||
@@ -618,10 +615,18 @@ void generate_enum(std::ostream& os, const cppast::cpp_enum& enum_)
     }
 }
 
-void visit_ast_and_generate(const cppast::cpp_file& ast_root, const std::string& filepath)
+bool visit_ast_and_generate(const cppast::cpp_file& ast_root, const std::string& filepath,bool flag_ismsvc)
 {
-    std::ofstream os{filepath + externname };
-
+	std::ofstream os(filepath + externname, std::ofstream::out
+#ifdef _MSC_BUILD
+		, SH_DENYWR
+#endif
+	);
+	if (!os.is_open())
+	{
+		std::cerr << "can't open file :" << filepath + externname << std::endl;
+		return false;
+	}
     const auto include_guard = fmt::format("TINYREFL_GENERATED_FILE_{}_INCLUDED", std::hash<std::string>()(filepath));
 
 	os << "#ifndef " << include_guard << "\n"
@@ -646,6 +651,9 @@ void visit_ast_and_generate(const cppast::cpp_file& ast_root, const std::string&
         [&body](const cppast::cpp_entity& e, const cppast::visitor_info& info) {
             if(info.is_new_entity() && info.access == cppast::cpp_public && !is_unknown_entity(e))
             {
+				if (!cppast::has_attribute(e, ATTRIBUTES_REFL))
+					return;
+
                 switch(e.kind())
                 {
                 case cppast::cpp_entity_kind::class_t:
@@ -660,10 +668,14 @@ void visit_ast_and_generate(const cppast::cpp_file& ast_root, const std::string&
 
     generate_string_definitions(os);
     os << body.str();
-	os << "#pragma warning(pop)\n";
+	if (flag_ismsvc)
+	{
+		os << "\n#pragma warning(pop)\n";
+	}
     os << "\n#endif // " << include_guard << "\n";
 
     std::cout << "Done. Metadata saved in " << filepath << ".tinyrefl\n";
+	return true;
 }
 
 cppast::cpp_standard get_cpp_standard(const std::string& cpp_standard)
@@ -763,7 +775,6 @@ bool reflect_file(std::string filepath
 	, cl::list<std::string>& warnings
 	, std::string clangbin, std::string clangversion,std::string clangsystemfile,bool nodry,bool msvcSupport)
 {
-	flag_ismsvc = msvcSupport;
 	format_paths(filepath, clangbin, clangsystemfile);
 	for (auto& p : include_dirs)
 		format_path(p);
@@ -904,8 +915,7 @@ bool reflect_file(std::string filepath
 
         if(file.has_value())
         {
-            visit_ast_and_generate(file.value(), filepath);
-            return true;
+            return visit_ast_and_generate(file.value(), filepath, msvcSupport);
         }
         else
         {
@@ -918,49 +928,6 @@ bool reflect_file(std::string filepath
 
     return false;
 }
-inline std::string WCharToChar(const wchar_t* str)
-{
-	return std::filesystem::path(str).generic_string();
-}
-
-//extern "C"{
-//	__declspec(dllexport) bool reflect_file_execute(const wchar_t* filepath
-//		, const cppast::cpp_standard cpp_standard
-//		, const wchar_t** include_dirs, size_t include_dirs_size
-//		, const wchar_t** definitions, size_t definitions_size
-//		, const wchar_t** custom_flags, size_t custom_flags_size
-//		, const wchar_t* clangbin, const wchar_t* clangversion, const wchar_t* clangsystemdir, bool nodry, bool msvcSupport)
-//	{
-//		cl::list<std::string> includedirs(cl::NumOccurrencesFlag::Optional);
-//		for (int i = 0; i < include_dirs_size; ++i)
-//		{
-//			includedirs.push_back(WCharToChar(include_dirs[i]));
-//		}
-//		cl::list<std::string> definitions1(cl::NumOccurrencesFlag::Optional);
-//		for (int i = 0; i < definitions_size; ++i)
-//		{
-//			includedirs.push_back(WCharToChar(definitions[i]));
-//		}
-//		std::vector<std::string> customflags;
-//		for (int i = 0; i < custom_flags_size; ++i)
-//		{
-//			includedirs.push_back(WCharToChar(custom_flags[i]));
-//		}
-//		cl::list<std::string> warnings(cl::NumOccurrencesFlag::Optional);
-//		return reflect_file(WCharToChar(filepath), cpp_standard
-//			, includedirs, definitions1, customflags, warnings
-//			, WCharToChar(clangbin), WCharToChar(clangversion), WCharToChar(clangsystemdir), nodry, msvcSupport);
-//	}
-//
-//	__declspec(dllexport) const wchar_t* reflect_generate_path(const wchar_t* filepath)
-//	{
-//		std::filesystem::path path(filepath);
-//		path += externname;
-//		static std::wstring storeBuffer;
-//		storeBuffer = path.generic_wstring();
-//		return storeBuffer.c_str();
-//	}
-//}
 
 int main(int argc, char** argv)
 {
@@ -1000,4 +967,3 @@ int main(int argc, char** argv)
     }
 }
 
-#endif
