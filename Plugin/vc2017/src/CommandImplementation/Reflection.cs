@@ -132,9 +132,8 @@ namespace ReflectionCommandImplementation
         public static void ExecuteReflection(ITextView textView)
         {
             if (!IsSupport(textView)) return;
-            var dte = Package.GetGlobalService(typeof(SDTE)) as DTE;
             var engine = Package.GetGlobalService(typeof(SVCProjectEngine)) as VCProjectEngine;
-            if (engine == null || dte == null || _outputWindow == null) return;
+            if (engine == null || _outputWindow == null) return;
 
             if (!GetReflectionArguments(textView, _outputWindow, out var arguments))
                 _outputWindow.OutputStringThreadSafe("can't find project includes and defines");
@@ -198,6 +197,16 @@ namespace ReflectionCommandImplementation
                 if (document == null) throw new Exception("can't get TextDocData EnvDTE.DTEDocument");
                 // finder file in which project
                 var project = document.ProjectItem.ContainingProject.Object as VCProject;
+                if (project == null)
+                {
+                    var dte = Package.GetGlobalService(typeof(SDTE)) as DTE;
+                    if (dte != null)
+                    {
+                        var activeProjects = dte.ActiveSolutionProjects as Array;
+                        if (activeProjects != null && activeProjects.Length > 0)
+                            project = activeProjects.GetValue(0) as VCProject;
+                    }
+                }
                 if (project == null) throw new Exception("can't get VCProject from ContainingProject");
 
                 if (!(project.ActiveConfiguration is VCConfiguration2 activeConfiguration)) return false;

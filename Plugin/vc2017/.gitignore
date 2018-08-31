@@ -1,0 +1,7 @@
+build/
+.ycm_extra_conf.py
+*.tinyrefl
+.vs
+bin
+obj
+packages
